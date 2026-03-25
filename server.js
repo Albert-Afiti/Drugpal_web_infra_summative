@@ -132,24 +132,51 @@ app.get('/api/drug/interactions', async (req, res) => {
       { validateStatus: s => s < 500 }
     );
 
-    // RxNorm returns 404 plain text when no interactions exist — treat as empty
-    if (interactionRes.status === 404) {
-      const result = { total: 0, drugs: validRxCUIs.map(r => r.name), unresolved, interactions: [] };
-      cache.set(cacheKey, result);
-      return res.json(result);
-    }
-
     // Simplified extraction logic
     const interactions = [];
-    const groups = interactionRes.data?.fullInteractionTypeGroup || [];
-    groups.forEach(g => g.fullInteractionType?.forEach(fit => fit.interactionPair?.forEach(p => {
-      interactions.push({
-        drug1: p.interactionConcept?.[0]?.minConceptItem?.name || 'Unknown',
-        drug2: p.interactionConcept?.[1]?.minConceptItem?.name || 'Unknown',
-        severity: p.severity,
-        description: p.description
+
+    if (interactionRes.status !== 404) {
+      const groups = interactionRes.data?.fullInteractionTypeGroup || [];
+      groups.forEach(g => g.fullInteractionType?.forEach(fit => fit.interactionPair?.forEach(p => {
+        interactions.push({
+          drug1: p.interactionConcept?.[0]?.minConceptItem?.name || 'Unknown',
+          drug2: p.interactionConcept?.[1]?.minConceptItem?.name || 'Unknown',
+          severity: p.severity,
+          description: p.description
+        });
+      })));
+    }
+
+    // Fallback: return FDA label drug interaction sections for each drug
+    if (interactions.length === 0) {
+      const drugNames = validRxCUIs.map(r => r.name);
+      const labelResults = await Promise.allSettled(
+        drugNames.map(name => api.get(
+          `https://api.fda.gov/drug/label.json?search=(openfda.brand_name:"${encodeURIComponent(name)}"+openfda.generic_name:"${encodeURIComponent(name)}")&limit=1${fdaApiKey()}`,
+          { validateStatus: s => s < 500 }
+        ))
+      );
+
+      labelResults.forEach((result, i) => {
+        if (result.status !== 'fulfilled' || !result.value.data?.results?.[0]) return;
+        const label = result.value.data.results[0];
+        const interactionText = label.drug_interactions?.[0] || '';
+        if (!interactionText) return;
+
+        const text = interactionText.substring(0, 500) + (interactionText.length > 500 ? '...' : '');
+        const lower = interactionText.toLowerCase();
+        const severity = lower.includes('contraindicated') || lower.includes('avoid') ? 'High'
+          : lower.includes('caution') || lower.includes('monitor') ? 'Moderate'
+          : 'Low';
+
+        interactions.push({
+          drug1: drugNames[i],
+          drug2: 'other medications',
+          severity,
+          description: `Known interactions for ${drugNames[i]} (from FDA label): ${text}`
+        });
       });
-    })));
+    }
 
     const seen = new Set();
     const unique = interactions.filter(i => {
