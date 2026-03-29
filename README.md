@@ -1,5 +1,11 @@
 # ExercisePal — Your Daily Fitness Trainer
 
+**Live App:** https://ialbert.tech
+**Demo Video:** https://youtu.be/ao8hMABcwdw?si=S0dAd1rMzdsTLXVR
+**GitHub:** https://github.com/Albert-Afiti/Exercisepal_web_infra_summative_Albert_Afiti
+
+---
+
 ExercisePal is a full-stack web application that acts as a personal fitness trainer. It provides daily workout plans, an exercise library with search and filter, a weekly training schedule, and a map of nearby gyms in Kigali, Rwanda. The app is designed to help users build and maintain a consistent fitness routine — whether they are at the gym or working out at home.
 
 ---
